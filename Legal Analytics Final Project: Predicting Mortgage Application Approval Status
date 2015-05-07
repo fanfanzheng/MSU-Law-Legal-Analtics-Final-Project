@@ -1,0 +1,54 @@
+library(foreign)
+RawData <- read.csv("~/2013MichiganMortgageData.csv")
+CleanData <- RawData[(c("action_taken_name", "applicant_income_000s",  "loan_amount_000s", "applicant_ethnicity_name", "applicant_race_name_1", "applicant_sex_name", "co_applicant_ethnicity_name", "co_applicant_race_name_1", "co_applicant_sex_name", "loan_purpose_name", "loan_type_name", "owner_occupancy_name", "property_type_name"))]
+CleanData[c("applicant_income_000s")][is.na(CleanData[c("applicant_income_000s")])] <- 0
+names(CleanData)[names(CleanData)=="action_taken_name"] <- "application_approval_status"
+names(CleanData)[names(CleanData)=="applicant_race_name_1"] <- "applicant_race"
+names(CleanData)[names(CleanData)=="applicant_ethnicity_name"] <- "applicant_ethnicity"
+names(CleanData)[names(CleanData)=="applicant_sex_name"] <- "applicant_sex"
+names(CleanData)[names(CleanData)=="co_applicant_race_name_1"] <- "co_applicant_race"
+names(CleanData)[names(CleanData)=="co_applicant_ethnicity_name"] <- "co_applicant_ethnicity"
+names(CleanData)[names(CleanData)=="co_applicant_sex_name"] <- "co_applicant_sex"
+names(CleanData)[names(CleanData)=="loan_purpose_name"] <- "loan_purpose"
+names(CleanData)[names(CleanData)=="loan_type_name"] <- "loan_type"
+names(CleanData)[names(CleanData)=="property_type_name"] <- "property_type"
+names(CleanData)[names(CleanData)=="owner_occupancy_name"] <- "owner_occupancy"
+CleanData2 <- CleanData
+CleanData2 <- CleanData2[CleanData$application_approval_status %in% c("Loan originated", "Application denied by financial institution", "Application approved but not accepted", "Loan purchased by the institution"), ]
+CleanData2 <- CleanData2[CleanData2$loan_purpose == "Home purchase",]
+CleanData2 <- CleanData2[CleanData2$loan_type == "Conventional",]
+CleanData2 <- CleanData2[CleanData2$owner_occupancy == "Owner-occupied as a principal dwelling",]
+CleanData2 <- CleanData2[CleanData2$property_type == "One-to-four family dwelling (other than manufactured housing)",]
+CleanData2<-CleanData2[!(CleanData2$applicant_ethnicity=="Information not provided by applicant in mail, Internet, or telephone application"),]
+CleanData2<-CleanData2[!(CleanData2$applicant_ethnicity=="Not applicable"),]
+CleanData2<-CleanData2[!(CleanData2$applicant_race=="Information not provided by applicant in mail, Internet, or telephone application"),]
+CleanData2<-CleanData2[!(CleanData2$applicant_race=="Not Applicable"),]
+CleanData2<-CleanData2[!(CleanData2$applicant_sex=="Information not provided by applicant in mail, Internet, or telephone application"),]
+CleanData2<-CleanData2[!(CleanData2$applicant_sex=="Not Applicable"),]
+CleanData2<-CleanData2[!(CleanData2$co_applicant_ethnicity=="Information not provided by applicant in mail, Internet, or telephone application"),]
+CleanData2<-CleanData2[!(CleanData2$co_applicant_ethnicity=="Not applicable"),]
+CleanData2<-CleanData2[!(CleanData2$co_applicant_sex=="Information not provided by applicant in mail, Internet, or telephone application"),]
+CleanData2<-CleanData2[!(CleanData2$co_applicant_sex=="Not Applicable"),]
+CleanData2<-CleanData2[!(CleanData2$co_applicant_sex=="No co-applicant"),]
+CleanData2<-CleanData2[!(CleanData2$co_applicant_race=="Information not provided by applicant in mail, Internet, or telephone application"),]
+CleanData2<-CleanData2[!(CleanData2$co_applicant_race=="Not Applicable"),]
+CleanData2$application_approval_status <- as.character(CleanData2$application_approval_status)
+CleanData2$application_approval_status[CleanData2$application_approval_status=='Loan purchased by the institution'] <- 'Application approved'
+CleanData2$application_approval_status[CleanData2$application_approval_status=='Loan originated'] <- 'Application approved'
+CleanData2$application_approval_status[CleanData2$application_approval_status=='Application approved but not accepted'] <- 'Application approved'
+CleanData2$application_approval_status[CleanData2$application_approval_status=='Application denied by financial institution'] <- 'Application denied'
+CleanData3 <- CleanData2[c("application_approval_status", "applicant_income_000s",  "loan_amount_000s", "applicant_ethnicity", "applicant_race", "applicant_sex", "co_applicant_ethnicity", "co_applicant_race", "co_applicant_sex")]
+attach(CleanData3)
+CleanData3$applicant_income_level[applicant_income_000s <= 13] <- "Low"
+CleanData3$applicant_income_level[applicant_income_000s > 13 & applicant_income_000s <= 49] <- "Low medium"
+CleanData3$applicant_income_level[applicant_income_000s > 49 & applicant_income_000s <= 125] <- "High medium"
+CleanData3$applicant_income_level[applicant_income_000s > 125] <- "High"
+detach(CleanData3)
+SamplingData <- CleanData3[sample(nrow(CleanData2), 10000),]
+library(party)
+fitctree = ctree(as.factor(application_approval_status) ~ as.factor(applicant_income_level) + loan_amount_000s + as.factor(applicant_ethnicity) + as.factor(applicant_race) + as.factor(applicant_sex) + as.factor(co_applicant_race) + as.factor(co_applicant_sex) + as.factor(co_applicant_ethnicity), data=SamplingData)
+fitctree
+plot(fitctree, main="Conditional Inference Tree for Mortgage Application")
+TestData <- CleanData3
+TestData$pred_application__approval_ctree = predict(fitctree, TestData, type="response")
+table(TestData$application_approval_status, TestData$pred_application__approval_ctree)
